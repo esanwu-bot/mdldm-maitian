@@ -77,10 +77,11 @@ CREATE TABLE IF NOT EXISTS internal_client_config (
 ```sql
 CREATE TABLE IF NOT EXISTS social_accounts (
   account_id          TEXT PRIMARY KEY,     -- 内部 UUID
-  platform            TEXT NOT NULL,        -- linkedin|youtube|facebook|x|reddit
+  platform            TEXT NOT NULL,        -- 可扩展：linkedin|youtube|facebook|x|reddit|instagram|tiktok|vimeo|...
   provider_account_id TEXT NOT NULL,        -- 平台侧 ID / URN
   account_name        TEXT NOT NULL,
-  account_type        TEXT NOT NULL,        -- organization|member|page|channel
+  account_type        TEXT NOT NULL,        -- 可扩展：organization|member|page|channel|business|creator|brand|...
+  capabilities_json   TEXT,                 -- 该账号实际可用的发布/媒体/分析能力
   status              TEXT NOT NULL DEFAULT 'active', -- active|reauth_required|revoked|error
   granted_scopes      TEXT NOT NULL,
   token_expires_at    TEXT,
@@ -91,6 +92,34 @@ CREATE TABLE IF NOT EXISTS social_accounts (
   UNIQUE (platform, provider_account_id)
 );
 
+-- 平台范围注册表：区分当前实施、后续评估、范围外；不把 5 个平台写成封闭 CHECK
+CREATE TABLE IF NOT EXISTS platform_registry (
+  platform             TEXT PRIMARY KEY,
+  display_name         TEXT NOT NULL,
+  implementation_scope TEXT NOT NULL,       -- current|evaluation|out_of_scope
+  implementation_phase TEXT,                -- P1|P2|P4|...
+  auth_type            TEXT,
+  capabilities_json    TEXT,
+  status               TEXT NOT NULL DEFAULT 'active',
+  updated_at           TEXT NOT NULL
+);
+```
+
+平台范围（本表为配置数据，不是数据库 CHECK 枚举）：
+
+| platform | implementation_scope | 当前阶段 | 说明 |
+|---|---|---|---|
+| linkedin | `current` | P1 | 端到端 PoC |
+| youtube | `current` | P2 | 视频上传/Analytics |
+| facebook | `current` | P2 | Page 发布/Insights |
+| x | `current` | P4 | 成本门禁后实施 |
+| reddit | `current` | P4 | 商业协议后实施；未签协议只做草稿 |
+| instagram | `evaluation` | 后续 | 与 Meta 账号/权限一起评估 |
+| tiktok | `evaluation` | 后续 | Content Posting 审核后再评估 |
+| vimeo | `evaluation` | 后续 | 先确认是否存在实际需求 |
+| 其他平台 | 待登记 | 后续 | 通过 `platform_registry` 新增，不改表结构 |
+
+```sql
 CREATE TABLE IF NOT EXISTS oauth_tokens (
   token_id        TEXT PRIMARY KEY,
   account_id      TEXT NOT NULL,

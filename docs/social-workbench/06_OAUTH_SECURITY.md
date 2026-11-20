@@ -103,6 +103,18 @@ oauth_tokens:    account_id, access_token_enc, refresh_token_enc, expires_at, sc
 - Scope 变化必须使旧审批失效（因为能力边界变了）。
 - LinkedIn 身份读取不得混用：OIDC UserInfo 用 `openid profile email`；旧版成员资料 API 才用 `r_liteprofile`/`r_basicprofile`，且以后台实际批准为准。
 
+### 4.1 当前实施范围与后续评估
+
+当前实施范围：LinkedIn（P1）、YouTube/Facebook（P2）、X/Reddit（P4，带成本与商业协议门禁）。以下平台**不属于当前实施范围**，仅保留扩展设计，Scope 必须重新核验后才能申请：
+
+| 平台 | 授权类型 | 候选 Scope（待核验） | 当前状态 |
+|---|---|---|---|
+| Instagram | Meta OAuth（与 Facebook 同体系） | `instagram_content_publish`、`instagram_manage_insights` | `evaluation`；账号未核实 |
+| TikTok | OAuth 2.0 | Content Posting 相关 Scope（待核验） | `evaluation`；审核未确认 |
+| Vimeo | OAuth 2.0 | 待核验 | `evaluation`；需求未确认 |
+
+平台范围以 `04_DATA_MODEL.md` 的 `platform_registry` 为准；新增平台不得修改 `social_accounts` 表结构，只登记 registry 与 Adapter。
+
 ## 5. 日志与错误脱敏
 
 禁止记录：

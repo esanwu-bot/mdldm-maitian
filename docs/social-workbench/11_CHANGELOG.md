@@ -20,6 +20,8 @@
 | R1-05 | X 自有读取 `$0.001` 标记未确认，不纳入预算；按 `$0.005/resource` 保守估算 |
 | R1-06 | Reddit 商业 API 协议门禁（2026-07-20 修订条款）；未获批前阻断 API；数据保留按平台策略，不默认 24 个月 |
 | R1-07 | 修正行数统计口径：P0 的 3,015 = 13 份正文 3,002 行（git numstat）+ `SHA256SUMS.txt` 13 行；此前 3,001 为 `wc -l` 少算 1 行且未计校验和文件 |
+| R1-08 | 账号盘点中的 OAuth/Scope/Token 状态改为 `UNKNOWN`，区分“未发现记录”与“已确认未授权”；只有检查平台授权后台后才可用 `NOT_AUTHORIZED`/`UNAUTHORIZED` |
+| R1-09 | 在 04/06/12 明确当前实施平台与后续评估平台；`platform_registry`、`account_type`、`capabilities_json` 预留扩展，不把 5 个平台写成封闭集合 |
 
 ### 新增文件
 

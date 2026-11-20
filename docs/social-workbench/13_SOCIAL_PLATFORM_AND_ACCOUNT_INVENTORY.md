@@ -3,11 +3,18 @@
 | 项 | 内容 |
 |---|---|
 | 文档 | `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md` |
-| 版本 | P0-R1 初版 |
+| 版本 | P0-R1（含 R1-08 修订） |
 | 盘点日期 | 2026-11-20 |
-| 盘点范围 | LinkedIn、Facebook、X、Reddit、Instagram、TikTok、YouTube、Vimeo，以及视频分发渠道 |
+| 范围 | LinkedIn、Facebook、X、Reddit、Instagram、TikTok、YouTube、Vimeo，以及视频分发渠道 |
 | 本轮性质 | 只盘点与取证；不注册账号、不申请授权、不修改账号、不发布内容、不购买套餐 |
 | 结论状态 | **没有取得任何 Morrishk 真实社媒账号的账号名、主页 URL 或管理员证据**；台账以待确认占位记录建立 |
+
+### 版本记录
+
+| 版本 | 日期 | 变更 |
+|---|---|---|
+| P0-R1 | 2026-11-20 | 初版：8 个平台待确认台账、五层核验、视频能力矩阵 |
+| P0-R1（R1-08） | 2026-11-20 | OAuth/Scope/Token/发布/Analytics 状态统一改为 `UNKNOWN`，区分“未发现记录”与“已确认未授权”；新增 `token_status` 列 |
 
 ## 1. 执行摘要
 
@@ -95,7 +102,7 @@
 
 本轮**没有取得任何真实账号名称或 URL**。为避免虚构，以下每个平台只建立 **1 条待确认占位记录**，`account_name` 与 `account_url` 明确写“待项目方提供/未知”。项目方提供资料后，再按真实账号逐条展开，不能把占位记录当成真实账号。
 
-字段取值：`UNKNOWN` = 无证据；`否` = 未核实；`未授权` = 当前没有 OAuth；`未验证` = 没有真实 API 调用。
+字段取值：`UNKNOWN` = 无证据或未检查；`否` = 未核实；`NOT_AUTHORIZED`/`UNAUTHORIZED` = 已检查平台后台并确认未授权；没有真实调用证据时，publishing/analytics 也写 `UNKNOWN`。
 
 账号状态枚举（后续按此维护）：
 
@@ -127,16 +134,18 @@
 
 ### 5.3 API、授权与发布
 
-| platform | developer_app | oauth_status | granted_scopes | publishing_status | analytics_status | api_tier | cost | last_verified_at | evidence | blockers | next_action |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| linkedin | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | API 调用不按次收费；审核门槛见 03 | 2026-11-20（仅资料核对） | 官网页脚无账号链接；工作区无账号记录 | Page URL/URN、管理员、应用、审批人均缺 | 提供 Company Page URL/URN、管理员角色、应用 ID、测试 Page |
-| facebook | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | 无按次费用；审核/企业验证 | 2026-11-20 | 同上 | Page ID、Meta App、企业验证、审核状态 | 提供 Page ID/管理员/App ID/审核状态 |
-| x | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | 按量：$0.015/帖，带 URL $0.200/帖；读取 $0.005 | 2026-11-20 | 同上 | handle、开发者项目、预算 | 提供 handle、项目 ID、月度预算 |
-| reddit | 未知（未核验） | 未授权 | 无 | 未验证 | 无发布级 Analytics | 未确认 | 商业用途需单独协议 | 2026-11-20 | 官方页本环境 403；工作区无账号 | 账号、subreddit、商业协议 | 先签协议/获许可，再提供账号 |
-| instagram | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | 无按次费用；Meta 审核 | 2026-11-20 | 工作区无账号记录 | Professional Account、Page 绑定、App | 提供 IG 账号/Page 绑定/App |
-| tiktok | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | 免费额度/付费规则待核验 | 2026-11-20 | 工作区无账号记录 | 账号、开发者应用、Content Posting 审核 | 提供账号类型、App、审核状态 |
-| youtube | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认（上传 100/日；其他 10,000 units/日） | 配额内免费 | 2026-11-20 | 工作区无频道记录 | Channel ID、Brand Account、GCP 项目、审核 | 提供频道 ID、GCP 项目、OAuth 状态 |
-| vimeo | 未知（未核验） | 未授权 | 无 | 未验证 | 未验证 | 未确认 | 套餐相关，待核验 | 2026-11-20 | 无账号/套餐证据 | 是否有实际需求未确认 | 先确认是否需要 Vimeo |
+> **证据规则（R1-08）**：“没有在项目资料中发现 OAuth 记录”不等于“已经检查所有平台后台并确认未授权”。未检查后台时一律写 `UNKNOWN`；只有实际进入平台授权后台确认后，才可使用 `NOT_AUTHORIZED` / `UNAUTHORIZED`。
+
+| platform | developer_app | oauth_status | granted_scopes | token_status | publishing_status | analytics_status | api_tier | cost | last_verified_at | evidence | blockers | next_action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| linkedin | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | API 调用不按次收费；审核门槛见 03 | 2026-11-20（仅资料核对） | 官网页脚无账号链接；工作区无账号记录 | Page URL/URN、管理员、应用、审批人均缺 | 提供 Company Page URL/URN、管理员角色、应用 ID、测试 Page |
+| facebook | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 无按次费用；审核/企业验证 | 2026-11-20 | 同上 | Page ID、Meta App、企业验证、审核状态 | 提供 Page ID/管理员/App ID/审核状态 |
+| x | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 按量：$0.015/帖，带 URL $0.200/帖；读取 $0.005 | 2026-11-20 | 同上 | handle、开发者项目、预算 | 提供 handle、项目 ID、月度预算 |
+| reddit | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（文档未见发布级 Analytics；未实测）` | `UNKNOWN` | 商业用途需单独协议 | 2026-11-20 | 官方页本环境 403；工作区无账号 | 账号、subreddit、商业协议 | 先签协议/获许可，再提供账号 |
+| instagram | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 无按次费用；Meta 审核 | 2026-11-20 | 工作区无账号记录 | Professional Account、Page 绑定、App | 提供 IG 账号/Page 绑定/App |
+| tiktok | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 免费额度/付费规则待核验 | 2026-11-20 | 工作区无账号记录 | 账号、开发者应用、Content Posting 审核 | 提供账号类型、App、审核状态 |
+| youtube | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 配额内免费 | 2026-11-20 | 工作区无频道记录 | Channel ID、Brand Account、GCP 项目、审核 | 提供频道 ID、GCP 项目、OAuth 状态 |
+| vimeo | `UNKNOWN` | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（未检查平台授权后台）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN` | 套餐相关，待核验 | 2026-11-20 | 无账号/套餐证据 | 是否有实际需求未确认 | 先确认是否需要 Vimeo |
 
 ### 5.4 分发渠道（与账号分离）
 
@@ -187,7 +196,7 @@
 | LinkedIn | 未知 | 未知 | 未知 | 未知 | 未知 | 本轮未提供 |
 | Facebook | 未知 | 未知 | 未知 | 未知 | 未知 | 本轮未提供 |
 | X | 未知 | 未知 | 未知 | 未知 | 未知 | 本轮未提供 |
-| Reddit | 未知 | 未知 | 未申请/未核验 | 未知 | 无发布级 Analytics | 本轮未提供 |
+| Reddit | 未知 | 未知 | `UNKNOWN` | 未知 | 未知 | 本轮未提供 |
 | Instagram | 未知 | 未知（随 Meta App） | 未知 | 未知 | 未知 | 本轮未提供 |
 | TikTok | 未知 | 未知 | 未知 | 未知 | 未知 | 本轮未提供 |
 | YouTube | 未知 | 未知 | 未知 | 未知 | 未知 | 本轮未提供 |
@@ -197,14 +206,16 @@
 
 | 平台 | OAuth 状态 | 已授予 Scope | 发布权限 | Analytics 权限 | Token 状态 | 备注 |
 |---|---|---|---|---|---|---|
-| LinkedIn | 未授权 | 无 | 未验证 | 未验证 | 无 Token | 需要 Company Page 管理员与 Community Management 审核 |
-| Facebook | 未授权 | 无 | 未验证 | 未验证 | 无 Token | 需要 Page Token、App Review、企业验证 |
-| X | 未授权 | 无 | 未验证 | 未验证 | 无 Token | OAuth2 PKCE；按量计费 |
-| Reddit | 未授权 | 无 | 未验证 | 无发布级 Analytics | 无 Token | 商业协议未签，阻断 |
-| Instagram | 未授权 | 无 | 未验证 | 未验证 | 无 Token | 需 Meta App 与 Professional Account |
-| TikTok | 未授权 | 无 | 未验证 | 未验证 | 无 Token | Content Posting 审核未确认 |
-| YouTube | 未授权 | 无 | 未验证 | 未验证 | 无 Token | 需 GCP 项目与 OAuth 审核 |
-| Vimeo | 未授权 | 无 | 未验证 | 未验证 | 无 Token | API/套餐待确认 |
+| LinkedIn | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | 需要 Company Page 管理员与 Community Management 审核 |
+| Facebook | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | 需要 Page Token、App Review、企业验证 |
+| X | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | OAuth2 PKCE；按量计费 |
+| Reddit | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（文档未见发布级 Analytics；未实测）` | `UNKNOWN（未检查平台授权后台）` | 商业协议未签，阻断 |
+| Instagram | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | 需 Meta App 与 Professional Account |
+| TikTok | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | Content Posting 审核未确认 |
+| YouTube | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | 需 GCP 项目与 OAuth 审核 |
+| Vimeo | `UNKNOWN（未发现项目资料记录）` | `UNKNOWN` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（无真实调用证据）` | `UNKNOWN（未检查平台授权后台）` | API/套餐待确认 |
+
+> 只有实际进入平台授权后台并确认“没有授权”后，才可写 `NOT_AUTHORIZED` 或 `UNAUTHORIZED`。当前没有该证据。
 
 ## 10. 视频发布与 Analytics 能力矩阵
 
@@ -332,7 +343,7 @@
 | 2 | 哪些账号归 Morrishk 所有？ | **无法确认**；无归属证据 |
 | 3 | 哪些账号已有管理员权限？ | **无法确认**；无后台证据 |
 | 4 | 哪些账号可以申请官方 API？ | 平台层面均可申请；账号层面**未知**，取决于账号类型与开发者应用 |
-| 5 | 哪些账号已完成 OAuth？ | **无**；本轮未发现任何 OAuth 记录 |
+| 5 | 哪些账号已完成 OAuth？ | **无法确认**；未发现项目资料中的 OAuth 记录，但没有检查各平台授权后台，不能写成“已确认未授权” |
 | 6 | 哪些账号能够真实发布内容？ | **无证据**；没有 `REAL_ACCOUNT_PASS` |
 | 7 | 哪些账号能够读取 Analytics？ | **无证据**；仅文档能力，未真实调用 |
 | 8 | 哪些视频频道可以通过 API 上传和管理视频？ | **无法确认**；YouTube 等能力有文档，但频道/授权未知 |

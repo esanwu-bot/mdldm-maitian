@@ -185,12 +185,17 @@ Workbench                         Authorization Server
 
 | 平台 | 授权类型 | Token 存储 | 发布 Scope | 分析 Scope |
 |---|---|---|---|---|
-| LinkedIn | Authorization Code | 加密 | `w_organization_social` | `rw_organization_admin`、`r_organization_social` |
-| YouTube | Google OAuth | 加密 | `youtube.upload` | `yt-analytics.readonly` |
-| Facebook | Facebook Login | 加密 | `pages_manage_posts`、`pages_read_engagement` | `read_insights` |
-| X | OAuth2 + PKCE | 加密 | `tweet.write`、`media.write` | `tweet.read`、`users.read` |
-| Reddit | OAuth2 | 加密 | `submit` | `read` |
+| LinkedIn（P1） | Authorization Code | 加密 | `w_organization_social` | `rw_organization_admin`、`r_organization_social` |
+| YouTube（P2） | Google OAuth | 加密 | `youtube.upload` | `yt-analytics.readonly` |
+| Facebook（P2） | Facebook Login | 加密 | `pages_manage_posts`、`pages_read_engagement` | `read_insights` |
+| X（P4） | OAuth2 + PKCE | 加密 | `tweet.write`、`media.write` | `tweet.read`、`users.read` |
+| Reddit（P4） | OAuth2 | 加密 | `submit` | `read` |
+| Instagram（后续评估） | Meta OAuth | 加密 | 待核验 | 待核验 |
+| TikTok（后续评估） | OAuth2 | 加密 | 待核验 | 待核验 |
+| Vimeo（后续评估） | OAuth2 | 加密 | 待核验 | 待核验 |
 
+> 当前实施范围只包括 P1/P2/P4 的五个平台；Instagram、TikTok、Vimeo 属于 `evaluation`，不进入当前 OAuth 实施。平台范围以 `04_DATA_MODEL.md` 的 `platform_registry` 为准；新增平台通过 registry + Adapter 扩展，不修改 `social_accounts` 表结构。
+>
 > Reddit 的商业用途需单独协议（Data API Terms 2026-07-20 修订）；未取得明确许可/协议前，不启用 Reddit 外部授权与 API 调用。
 
 规则：
