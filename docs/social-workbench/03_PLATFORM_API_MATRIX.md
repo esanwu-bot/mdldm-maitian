@@ -35,7 +35,7 @@
 | 必需头 | `Authorization: Bearer`、`Linkedin-Version: YYYYMM`、`X-Restli-Protocol-Version: 2.0.0`、`Content-Type: application/json` |
 | 成功响应 | `201`，响应头 `x-restli-id` 为 Post URN |
 | 内容类型 | 文本、图片、视频、文档、文章、MultiImage、Poll（organic） |
-| 媒体 | 先经 Images/Videos/Documents API 上传，拿到 `urn:li:image|video|document` 再发帖 |
+| 媒体 | 先经 Images/Videos/Documents API 上传，拿到 `urn:li:image` / `urn:li:video` / `urn:li:document` 再发帖 |
 | 组织帖 | `author` 为 `urn:li:organization:{id}` |
 | 个人帖 | `author` 为 `urn:li:person:{id}`，需 `w_member_social` |
 | 原生定时 | **本次抓取的 Posts API 文档未确认 `scheduledAt` 字段**；按“工作台定时、到点提交”设计 |
@@ -217,7 +217,7 @@ Meta Graph API 的限流按应用、用户、Page 等维度计算；Page 请求�
 
 | 项 | 结论 | 证据 |
 |---|---|---|
-| 发布 | `POST /api/submit`（`kind=self|link`） | 公开 API 惯例，待核验 |
+| 发布 | `POST /api/submit`（`kind=self` 或 `kind=link`） | 公开 API 惯例，待核验 |
 | Scope | `submit`、`read` | 待核验 |
 | 认证 | OAuth 2.0（installed app / script） | 待核验 |
 | 速率 | 约 **100 queries/minute per OAuth client**（未认证约 10 QPM） | 社区与二手资料；官方页本环境不可读 |

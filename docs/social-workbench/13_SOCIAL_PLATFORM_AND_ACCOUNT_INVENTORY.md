@@ -46,6 +46,23 @@
 
 **规则：** 账号存在不等于 API 可用；OAuth 成功不等于发布权限获批；文档存在不等于真实账号可调用。
 
+### 2.3 五个独立核验层次
+
+每个账号必须分别判断，不能合并成一个“已开通”：
+
+| 平台 | 1. 账号存在性 | 2. 所有权 | 3. 管理权限 | 4. 开发者 API 条件 | 5. 实际 API 能力 |
+|---|---|---|---|---|---|
+| LinkedIn | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| Facebook | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| X | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| Reddit | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证；协议阻断 |
+| Instagram | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| TikTok | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| YouTube | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+| Vimeo | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | `UNKNOWN` | 未验证 |
+
+说明：第 1–3 层需要项目方后台证据；第 4 层需要开发者后台/审核邮件；第 5 层需要真实授权后的 API 调用。本轮三层都没有证据，因此不能进入第 5 层。
+
 ## 3. 社交媒体平台总清单
 
 | 平台 | 主要用途 | 账号类型 | 官方 API 能力 | Morrishk 账号证据 | 当前结论 |
@@ -191,6 +208,19 @@
 
 ## 10. 视频发布与 Analytics 能力矩阵
 
+### 10.1 视频资产清单
+
+| 平台 | 频道/账号 | 视频内容类型 | 当前视频数量 | 发布权限 | 上传 API | 处理状态 API | Analytics API | 状态 |
+|---|---|---|---|---|---|---|---|---|
+| YouTube | 待项目方提供 | Datasheet 解读/产品介绍/应用视频 | 未知 | 未知 | `videos.insert`（文档） | `processingDetails`（文档） | YouTube Analytics（文档） | `UNKNOWN` |
+| LinkedIn Video | 待项目方提供 | 企业技术视频 | 未知 | 未知 | Videos API（文档） | 帖子状态（文档） | Share/Video Analytics（文档） | `UNKNOWN` |
+| Facebook Video/Reels | 待项目方提供 | 产品/应用视频 | 未知 | 未知 | Video API（文档） | Post 查询（文档） | Page Insights（文档） | `UNKNOWN` |
+| Instagram Reels | 待项目方提供 | 产品短视频 | 未知 | 未知 | Content Publishing（文档） | 容器状态（文档） | Insights（文档） | `UNKNOWN` |
+| TikTok | 待项目方提供 | 产品短视频 | 未知 | 未知 | Content Posting（文档） | 待核验 | 待核验 | `UNKNOWN` |
+| Vimeo | 待项目方提供 | 企业展示视频 | 未知 | 未知 | 待核验 | 待核验 | 待核验 | `UNKNOWN` |
+
+### 10.2 能力矩阵
+
 | 能力 | YouTube | LinkedIn Video | Facebook Video | Instagram Reels | TikTok | Vimeo |
 |---|---|---|---|---|---|---|
 | 视频上传 API | `videos.insert`（文档） | Videos API（文档） | Video API（文档） | Content Publishing（文档） | Content Posting（文档） | 待核验 |
@@ -253,6 +283,21 @@
 
 ## 14. 证据链接及核验日期
 
+### 14.1 平台官方文档
+
+| 平台 | 官方文档 URL | 核验日期 | 等级 |
+|---|---|---|---|
+| LinkedIn | `https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api` | 2026-11-20 | `DOC_VERIFIED` |
+| YouTube | `https://developers.google.com/youtube/v3/docs/videos/insert`；`https://developers.google.com/youtube/analytics` | 2026-11-20 | `DOC_VERIFIED` |
+| Facebook | `https://developers.facebook.com/docs/pages-api/posts`；`https://developers.facebook.com/docs/graph-api/reference/page/insights/` | 2026-11-20 | `DOC_VERIFIED` |
+| X | `https://docs.x.com/x-api/posts/creation-of-a-post` | 2026-11-20 | `DOC_VERIFIED` |
+| Reddit | `https://www.reddit.com/dev/api/` | 2026-11-20 | 本环境 403；待复核 |
+| Instagram | `https://developers.facebook.com/docs/instagram-platform/content-publishing` | 2026-11-20 | `DOC_ONLY`，账号未验证 |
+| TikTok | `https://developers.tiktok.com/doc/content-posting-api-get-started` | 2026-11-20 | `DOC_ONLY`，账号未验证 |
+| Vimeo | `https://developer.vimeo.com/api/reference` | 2026-11-20 | `DOC_ONLY`，需求未确认 |
+
+### 14.2 项目内证据
+
 | 证据 | URL/位置 | 核验日期 | 结论 |
 |---|---|---|---|
 | Morrishk 官网首页 | `https://www.morrishk.net/` | 2026-11-20 | 页脚仅有 `linkedin.com`、`facebook.com`、`instagram.com`、`twitter.com` 平台首页链接，无账号 URL |
@@ -303,8 +348,11 @@
 - `09_IMPLEMENTATION_PLAN.md`：P1-A3/A5/A6 依赖本文件；账号未确认时 P1 只能 `MOCK_PASS`。
 - `10_ACCEPTANCE_TESTS.md`：`REAL_ACCOUNT_PASS` 必须引用本文件中已核实的账号记录。
 
-## 18. 本轮边界
+## 18. 账号安全要求与本轮边界
 
+- **不要求任何人向 Agent 发送密码、Cookie、Session、Refresh Token 或 Client Secret。**
+- 登录状态由项目方在安全环境中确认；本轮不尝试登录。
+- 管理员姓名/联系方式未获授权不猜测、不填写。
 - 未注册任何账号或开发者应用。
 - 未申请任何平台权限或 API 套餐。
 - 未登录任何 Morrishk 账号。
