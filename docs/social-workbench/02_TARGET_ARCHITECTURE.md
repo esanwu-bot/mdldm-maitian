@@ -17,8 +17,8 @@
 ┌────────────────────────────── Morrishk 侧 ──────────────────────────────┐
 │  Morrishk 商品主数据 API            Ds Bit 技术数据 API                  │
 │  - MPN / Brand / 标题 / 分类         - Datasheet 解析结果                 │
-│  - 详情 URL / 图片 / 卖点            - 结构化参数 / 页码证据              │
-│  - RELEASE_APPROVED 状态             - 技术说明 / 应用场景                │
+│  - 详情 URL / 图片 / 卖点            - 结构化参数 / RELEASE_APPROVED / 页码证据 │
+│  - PUBLIC_ELIGIBLE 状态              - 技术说明 / 应用场景                │
 └───────────────┬──────────────────────────────┬──────────────────────────┘
                 │ OAuth2 Client Credentials    │ 独立 Client Credentials
                 │ scope: product.read          │ scope: technical.read
@@ -27,7 +27,7 @@
 │                      内容源适配层 source/                                │
 │  product-source.adapter  dsbit-source.adapter  release-gate             │
 │  - 只读；不修改上游                                                      │
-│  - 只接收 RELEASE_APPROVED 的商品事实                                    │
+│  - 只接收 RELEASE_APPROVED 技术事实 + PUBLIC_ELIGIBLE 商品               │
 └───────────────────────────────┬─────────────────────────────────────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -181,12 +181,19 @@ src/
     "utm_campaign": "cmp_2026_q4_sic",
     "utm_content": "cnt_20261120_mpn_abc123"
   },
-  "review_status": "RELEASE_APPROVED",
+  "review_status": "SOCIAL_CONTENT_APPROVED",
   "approval_record": {
+    "stage": "SOCIAL_CONTENT_APPROVED",
     "approved_by": "user_...",
     "approved_at": "2026-11-20T10:00:00Z",
     "scope": "public_marketing",
     "content_version": 3
+  },
+  "source_gate": {
+    "dsbit_release_status": "RELEASE_APPROVED",
+    "product_publish_status": "PUBLIC_ELIGIBLE",
+    "source_version": "dsbit:2026-11-18T08:00:00Z",
+    "checked_at": "2026-11-20T09:55:00Z"
   },
   "scheduled_at": "2026-11-21T09:00:00Z"
 }
@@ -205,25 +212,37 @@ src/
 | `video_content` | YouTube 视频内容 | YouTube |
 | `reddit_draft` | Reddit 技术讨论草稿 | Reddit（半自动） |
 
-### 4.2 审批门禁
+### 4.2 三层独立门禁
+
+三个状态属于不同对象，禁止互相替代：
+
+| 对象 | 状态 | 含义 | 维护方 |
+|---|---|---|---|
+| Ds Bit 技术事实 | `RELEASE_APPROVED` | 该技术数据可作为对外技术事实来源 | Ds Bit / 技术审核 |
+| Morrishk 商品 | `PUBLIC_ELIGIBLE` | 该商品信息允许用于公开营销 | 商品 / 市场负责人 |
+| 社媒内容版本 | `SOCIAL_CONTENT_APPROVED` | 该版本文案、图片、链接允许发布 | 内容审核人 |
 
 ```text
 DRAFT
   └─ 内容生成/人工编辑
-       └─ CONTENT_REVIEW
-            ├─ PIPELINE_PASS：结构、字段、媒体校验通过（不等于可发布）
-            └─ CONTENT_APPROVED：内容负责人确认文案与事实
-                 └─ RELEASE_APPROVED：商品事实来自已批准版本，允许对外
-                      └─ SCHEDULED / PUBLISHED
+       └─ PIPELINE_PASS：结构、字段、媒体校验通过（不是审批）
+            └─ SOCIAL_CONTENT_APPROVED：内容负责人批准该社媒版本
+                 └─ 发布前门禁（三项必须同时满足）
+                      ├─ Ds Bit 技术事实 RELEASE_APPROVED
+                      ├─ Morrishk 商品 PUBLIC_ELIGIBLE
+                      └─ 社媒内容 SOCIAL_CONTENT_APPROVED
+                           └─ 创建 publish_job → SCHEDULED / PUBLISHED
 ```
 
 硬规则：
 
-1. 只有 `RELEASE_APPROVED` 的 `content_version` 可以生成发布任务。
-2. `PIPELINE_PASS` 不得写入 `approval_record`。
-3. 技术事实缺失证据（页码/表格）时，只能生成内部草稿。
-4. 修改 `technical_facts` 或 `target_url` 会使已有审批失效，必须重新审批。
-5. Ds Bit 技术分类只用于技术检索，不得直接映射为 Morrishk 业务分类。
+1. 三项门禁必须同时满足；任何一项不能替代另外两项。
+2. `RELEASE_APPROVED` 只属于 Ds Bit 技术事实，不代表商品可公开，也不代表社媒文案已批准。
+3. `PIPELINE_PASS` 不是审批，不得写入 `approval_record`。
+4. 技术事实缺失证据（页码/表格）时，只能生成内部草稿。
+5. 修改 `technical_facts`、`product_identity` 或 `target_url` 会使 `SOCIAL_CONTENT_APPROVED` 失效，必须重新审批。
+6. 商品 `PUBLIC_ELIGIBLE` 失效或撤下时，已排队但未发布的 job 必须取消。
+7. Ds Bit 技术分类只用于技术检索，不得直接映射为 Morrishk 业务分类。
 
 ## 5. Provider 接口契约
 
@@ -291,6 +310,8 @@ reconciler
   - 未找到且超过安全窗口：failed（允许人工重试）
   - 找到多条：unknown + 告警，禁止自动重试
 ```
+
+发布目标必须来自 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md` 中已核实的账号记录；未确认归属、管理员或账号类型的平台，不得创建 `publish_jobs`。平台名不能替代 `account_id`。
 
 `publish_jobs` 的本地唯一键：
 

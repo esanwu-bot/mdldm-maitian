@@ -5,7 +5,7 @@
 | 状态 | 含义 | 是否终态 | 允许自动重试 |
 |---|---|---|---|
 | `draft` | 内容或任务尚未提交审批 | 否 | 否 |
-| `approved` | 内容已 `RELEASE_APPROVED`，任务已生成但未排队 | 否 | 否 |
+| `approved` | 三层门禁通过且社媒内容已 `SOCIAL_CONTENT_APPROVED`，任务已生成但未排队 | 否 | 否 |
 | `queued` | 已进入队列，等待 worker 领取 | 否 | 否 |
 | `submitting` | 已发出请求或即将发出，结果未知 | 否 | 否（先对账） |
 | `processing` | 平台已接受，异步处理中（视频转码等） | 否 | 否（查询） |
@@ -50,12 +50,13 @@ unknown ──human decision──▶ cancelled
 ## 3. 不变量
 
 1. 一个 `job_id` 只对应一个 `content_version` 与一个 `payload_hash`。
-2. 内容版本或 payload 变化必须新建 job；旧 job 不得修改。
-3. `submitting` 状态必须持有未过期租约；租约过期视为崩溃。
-4. 每次状态变化写 `audit_events`；每次请求写 `publish_attempts`。
-5. `published` 必须有 `provider_post_id`（平台不提供时，必须有可验证的查询证据）。
-6. `unknown` 必须有 `last_error` 与对账截止时间。
-7. `cancelled` 只能从非终态进入；已发布内容只能走平台删除流程，不能改成 `cancelled`。
+2. 创建 job 前必须同时满足：Ds Bit 技术事实 `RELEASE_APPROVED`、商品 `PUBLIC_ELIGIBLE`、社媒内容 `SOCIAL_CONTENT_APPROVED`；缺一不可。
+3. 内容版本或 payload 变化必须新建 job；旧 job 不得修改。
+4. `submitting` 状态必须持有未过期租约；租约过期视为崩溃。
+5. 每次状态变化写 `audit_events`；每次请求写 `publish_attempts`。
+6. `published` 必须有 `provider_post_id`（平台不提供时，必须有可验证的查询证据）。
+7. `unknown` 必须有 `last_error` 与对账截止时间。
+8. `cancelled` 只能从非终态进入；已发布内容只能走平台删除流程，不能改成 `cancelled`。
 
 ## 4. 幂等与防重
 

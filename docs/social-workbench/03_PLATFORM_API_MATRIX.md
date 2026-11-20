@@ -4,15 +4,17 @@
 证据等级：**A** = 本次直接抓取官方文档并引用原文；**B** = 官方文档存在但本环境无法直接抓取/仅抓到摘要；**C** = 需注册后以实际响应核验。  
 本阶段**没有注册应用、没有调用任何平台 API、没有购买任何额度**。
 
+> 平台能力存在不等于 Morrishk 已有账号。真实账号、管理员、归属与开发者应用状态见 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md`；本文件只回答“平台能不能接”，不回答“Morrishk 有没有这个账号”。
+
 ## 1. 总矩阵
 
 | 平台 | 官方文档 | 发布 API | 状态/链接 | Analytics API | 认证 | 发布权限 | 账号前提 | 速率/配额 | 费用 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | LinkedIn | `learn.microsoft.com/linkedin/marketing/...` | `POST /rest/posts` | `GET /rest/posts/{urn}`；`x-restli-id` | `organizationalEntityShareStatistics` | OAuth 2.0 3-legged | `w_organization_social` / `w_member_social` | Company Page 管理员；Community Management API 审核 | 开发层 500 次/应用/日、100 次/成员/日 | API 不按次收费 | A |
 | YouTube | `developers.google.com/youtube/v3` | `videos.insert` | `videos.list` + `processingDetails` | YouTube Analytics API | OAuth 2.0 | `youtube.upload` | Google Cloud 项目 + YouTube 频道 | 上传 100 次/日；其他 10,000 units/日 | 配额内免费 | A |
-| Facebook | `developers.facebook.com/docs/pages-api` | `POST /{page-id}/feed`、`/photos`、`/videos` | `GET /{post-id}` | Page Insights | OAuth 2.0 + Page Token | `pages_manage_posts`、`pages_read_engagement` | Page 管理员；应用审核/企业验证 | BUC：应用 200×用户；Page 4800×活跃用户 | 免费 | A |
+| Facebook | `developers.facebook.com/docs/pages-api` | `POST /{page-id}/feed`、`/photos`、`/videos` | `GET /{post-id}` | Page Insights | OAuth 2.0 + Page Token | `pages_manage_posts`、`pages_read_engagement` | Page 管理员；应用审核/企业验证 | 动态限流（Platform/BUC 取决于 Token；响应头监测） | 免费 | A |
 | X | `docs.x.com` | `POST /2/tweets` | `GET /2/tweets/{id}` | 公开指标/自有内容读取 | OAuth 2.0 PKCE | `tweet.write`、`media.write` | X 开发者账号；按量 credits | 端点级限流，429 | **按量计费**：$0.015/帖；带 URL $0.200/帖 | A |
-| Reddit | `reddit.com/dev/api` | `POST /api/submit` | `GET /api/info` | **无发布级 Analytics API** | OAuth 2.0 | `submit`、`read` | Reddit 账号、应用注册、subreddit 规则 | 约 100 QPM/客户端（待核验） | 通常免费；商业用途受条款约束 | B/C |
+| Reddit | `reddit.com/dev/api` | `POST /api/submit` | `GET /api/info` | **无发布级 Analytics API** | OAuth 2.0 | `submit`、`read` | Reddit 账号、应用注册、subreddit 规则 | 约 100 QPM/客户端（待核验） | 商业用途需单独协议；未获批前阻断 API | B/C |
 
 ## 2. LinkedIn
 
@@ -50,6 +52,8 @@
 | `w_member_social` | 代表个人发帖 | 成员本人 |
 | `r_member_social` | 读取个人帖子 | **closed**，官方明确暂不接受申请 |
 | `r_member_postAnalytics` | 个人帖子分析 | Community Management API |
+| `openid profile email` | OIDC 身份读取（`/v2/userinfo`） | LinkedIn OIDC |
+| `r_liteprofile` / `r_basicprofile` | 旧版成员资料 API（`/v2/me`） | 按实际 API 与后台批准；不得与 OIDC 混用 |
 
 访问层级（官方原文要点）：
 
@@ -149,12 +153,17 @@ LinkedIn 是唯一一个“发布、查询、分析、删除”都能用同一�
 - 数据限制：Page 需 100+ likes；仅两年历史；unique 值为近似值。
 - 结论：P2 开始前必须锁定“当前版本仍可用”的指标清单，不能照搬旧教程。
 
-### 4.4 速率
+### 4.4 速率（动态限流，不写死额度）
 
-- App 级：`200 × Number of Users`。
-- Page 级：`4800 × Number of Engaged Users`。
-- Instagram：`4800 × Number of Impressions`。
-- 响应头：`X-App-Usage`、`X-Business-Use-Case-Usage`；超限停止调用直到窗口重置。
+Meta Graph API 的限流按应用、用户、Page 等维度计算；Page 请求可能适用 Platform 或 BUC 限额，**取决于 Token 类型与调用方**。官方文档给出的公式（如 `200 × Users`、`4800 × Engaged Users`）是口径示例，不应作为固定配额硬编码。
+
+实现要求：
+
+1. 每次响应读取 `X-App-Usage`、`X-Business-Use-Case-Usage`，按百分比动态控制。
+2. 建议阈值：80% 告警、90% 降速、95% 暂停该账号发布并等待窗口重置。
+3. 识别限流错误码（如 4/17/32/613 等，按当前版本文档）并指数退避。
+4. 不把“200×用户 / 4800×活跃用户”写成保证值或验收标准。
+5. 发布与 Insights 采集分别计量，避免互相挤占。
 
 ## 5. X
 
@@ -183,11 +192,11 @@ LinkedIn 是唯一一个“发布、查询、分析、删除”都能用同一�
 - 模式：**pay-per-usage credits，无订阅**。
 - 创建帖子：`$0.015 / request`。
 - **带 URL 的帖子：`$0.200 / request`**。
-- 普通读取：`$0.005 / resource`；自有内容读取：`$0.001 / resource`。
+- 普通读取：`$0.005 / resource`。**自有内容读取 `$0.001 / resource` 本次未能从价格表确认，标记 C，不纳入预算。**
 - 新用户：保存卡片并首次购买后可获 `$20` credits。
 - 媒体上传的单独计费未在定价页列出，标记 C，需在账单中核验。
 
-**对 Morrishk 的影响**：UTM 外链是 B2B 转化的关键，但每条带 URL 帖子 `$0.20`。若每月 30 条带链接帖子，仅发帖约 `$6.00`；再加自有内容读取 `30×30×$0.001≈$0.90`（按每天每帖一次估算）。不含媒体与重试。必须设置月度预算与“无链接/带链接”策略。
+**对 Morrishk 的影响**：UTM 外链是 B2B 转化的关键，但每条带 URL 帖子 `$0.20`。若每月 30 条带链接帖子，仅发帖约 `$6.00`；读取按当前可确认的 `$0.005/resource` 保守估算，30 天 × 30 帖 × `$0.005` ≈ `$4.50`。合计约 `$10.50/月`（不含媒体与重试）。必须设置月度预算与“无链接/带链接”策略。
 
 ### 5.4 速率与幂等
 
@@ -202,6 +211,7 @@ LinkedIn 是唯一一个“发布、查询、分析、删除”都能用同一�
 - API 文档：`https://www.reddit.com/dev/api/`
 - Data API Terms：`https://redditinc.com/policies/data-api-terms`
 - 本次从当前网络环境访问以上页面均返回 **403/仅导航**，**未取得可引用的官方原文**。因此本节除明确标注外均为 **B/C 级**，必须在注册应用后用实际响应头与文档复核。
+- Reviewer 指出的关键事实：Data API Terms 于 **2026-07-20** 修订；商业用途需要**单独协议**；平台保留自行设定 API 使用限制的权利。Morrishk 属于商业营销场景，**在获得明确许可/协议前不得正式实施 Reddit API**。
 
 ### 6.2 能力判断
 
@@ -213,13 +223,14 @@ LinkedIn 是唯一一个“发布、查询、分析、删除”都能用同一�
 | 速率 | 约 **100 queries/minute per OAuth client**（未认证约 10 QPM） | 社区与二手资料；官方页本环境不可读 |
 | 发布级 Analytics | **没有** impressions/reach API | 官方能力范围判断 |
 | 可读数据 | `GET /api/info` 可读 score、comments 等公开字段 | 待核验 |
-| 商业使用 | 受 Data API Terms 约束，可能需要单独协议 | 待法务确认 |
+| 商业使用 | Data API Terms（2026-07-20 修订）要求商业用途单独协议；未获批前阻断 | 法务确认/协议 |
 | 自动化边界 | 只允许“生成草稿 + 人工确认 + 人工发布/确认后发布” | 项目约束 |
 
 ### 6.3 Reddit 结论
 
 Reddit 不进入自动发布主链路。P4 只做：
 
+0. **前置门禁**：取得商业 API 协议/明确许可，并完成法务确认；未完成前不注册生产应用、不调用 API、不采集数据。
 1. 生成讨论草稿与证据引用。
 2. 人工选择 subreddit、阅读版规、确认账号身份。
 3. 人工点击发布，或在工作台内由授权人二次确认后调用 `submit`。
@@ -248,5 +259,5 @@ Reddit 不进入自动发布主链路。P4 只做：
 | E-04 | YouTube 公开上传是否需要 API audit | 以 Google 审核邮件为准 |
 | E-05 | Meta Insights 2026-06-15 后仍可用的指标清单 | P2 启动前用目标 Graph 版本实测 |
 | E-06 | X 媒体上传是否单独计费 | 以 X 账单/控制台为准 |
-| E-07 | Reddit 当前官方速率与商业条款原文 | 注册应用后以响应头与官方页面复核 |
+| E-07 | Reddit 当前官方速率、商业协议与数据保留要求 | 注册前先取得协议；以官方页面与响应头复核 |
 | E-08 | 各平台是否提供 idempotency key | P1/P2 实测；默认按不支持设计 |

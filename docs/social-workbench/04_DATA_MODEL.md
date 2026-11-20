@@ -57,17 +57,20 @@ CREATE TABLE IF NOT EXISTS user_roles (
   PRIMARY KEY (user_id, role)
 );
 
-CREATE TABLE IF NOT EXISTS internal_clients (
-  client_id          TEXT PRIMARY KEY,      -- morrishk-social-workbench-dsbit 等
-  client_secret_hash TEXT NOT NULL,         -- Argon2id/bcrypt，不存明文
-  audience           TEXT NOT NULL,         -- dsbit|morrishk
-  scopes             TEXT NOT NULL,         -- 空格分隔
-  status             TEXT NOT NULL DEFAULT 'active',
-  created_at         TEXT NOT NULL,
-  rotated_at         TEXT,
-  revoked_at         TEXT
+CREATE TABLE IF NOT EXISTS internal_client_config (
+  client_id       TEXT PRIMARY KEY,        -- morrishk-social-workbench-dsbit 等
+  resource        TEXT NOT NULL,           -- RFC 8707 resource，例如 https://dsbit.example/api
+  token_endpoint  TEXT NOT NULL,           -- 实际 Token Endpoint
+  scopes          TEXT NOT NULL,           -- 空格分隔
+  secret_ref      TEXT NOT NULL,           -- env:DSBIT_CLIENT_SECRET / secretmanager://...
+  status          TEXT NOT NULL DEFAULT 'active',
+  created_at      TEXT NOT NULL,
+  rotated_at      TEXT,
+  revoked_at      TEXT
 );
 ```
+
+> `secret_ref` 只保存“去哪里取密钥”，不保存 Secret 或 Secret 哈希。客户端凭证的哈希由 Token 签发方（Authorization Server）保存；工作台作为 OAuth Client，出站时从 Secret Manager/环境变量取明文并只在内存使用。
 
 ### 2.3 外部平台账号与 Token
 
@@ -105,6 +108,8 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_account ON oauth_tokens(account_id);
 ```
 
+> `social_accounts` 的真实账号来源与核实状态见 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md`；未核实归属/管理员的账号不得写入 `publish_jobs`。
+
 约束：
 
 - `access_token_enc`/`refresh_token_enc` 使用 AES-256-GCM；AAD 绑定 `account_id + platform + key_version`。
@@ -132,7 +137,7 @@ CREATE TABLE IF NOT EXISTS content_items (
   campaign_id      TEXT,
   content_language TEXT NOT NULL,
   current_version  INTEGER NOT NULL DEFAULT 1,
-  status           TEXT NOT NULL DEFAULT 'draft', -- draft|in_review|approved|released|archived
+  status           TEXT NOT NULL DEFAULT 'draft', -- draft|in_review|social_approved|released|archived
   created_by       TEXT NOT NULL,
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL,
@@ -148,7 +153,7 @@ CREATE TABLE IF NOT EXISTS content_versions (
   payload_json    TEXT NOT NULL,           -- 见 02 §4
   payload_hash    TEXT NOT NULL,           -- sha256(canonical json)
   source_version  TEXT,
-  review_status   TEXT NOT NULL,           -- DRAFT|PIPELINE_PASS|CONTENT_APPROVED|RELEASE_APPROVED
+  review_status   TEXT NOT NULL,           -- DRAFT|PIPELINE_PASS|SOCIAL_CONTENT_APPROVED
   created_by      TEXT NOT NULL,
   created_at      TEXT NOT NULL,
   PRIMARY KEY (content_id, version),
@@ -170,7 +175,7 @@ CREATE TABLE IF NOT EXISTS content_approvals (
   approval_id     TEXT PRIMARY KEY,
   content_id      TEXT NOT NULL,
   version         INTEGER NOT NULL,
-  stage           TEXT NOT NULL,           -- CONTENT_APPROVED|RELEASE_APPROVED
+  stage           TEXT NOT NULL,           -- SOCIAL_CONTENT_APPROVED
   decision        TEXT NOT NULL,           -- approved|rejected|revoked
   decided_by      TEXT NOT NULL,
   decided_at      TEXT NOT NULL,
@@ -180,13 +185,31 @@ CREATE TABLE IF NOT EXISTS content_approvals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_approvals_content ON content_approvals(content_id, version);
+
+-- 发布前门禁快照：三个维度分别记录，禁止用一个状态代表全部
+CREATE TABLE IF NOT EXISTS content_gate_checks (
+  content_id            TEXT NOT NULL,
+  version               INTEGER NOT NULL,
+  dsbit_release_status  TEXT NOT NULL,     -- RELEASE_APPROVED | NOT_RELEASED | REVOKED
+  product_publish_status TEXT NOT NULL,    -- PUBLIC_ELIGIBLE | NOT_ELIGIBLE | REVOKED
+  social_content_status TEXT NOT NULL,     -- SOCIAL_CONTENT_APPROVED | NOT_APPROVED | REVOKED
+  source_version        TEXT,
+  checked_at            TEXT NOT NULL,
+  checked_by            TEXT NOT NULL,
+  PRIMARY KEY (content_id, version)
+);
 ```
 
 硬约束（由应用层与数据库触发器共同保证）：
 
-1. 无 `RELEASE_APPROVED` 的版本不得创建 `publish_jobs`。
-2. `content_versions.payload_hash` 变化必须产生新版本，不允许原地改。
-3. `content_approvals` 只追加；撤销用 `decision='revoked'`，不删除记录。
+1. 创建 `publish_jobs` 前必须同时满足：
+   - `dsbit_release_status = 'RELEASE_APPROVED'`
+   - `product_publish_status = 'PUBLIC_ELIGIBLE'`
+   - `social_content_status = 'SOCIAL_CONTENT_APPROVED'`
+2. `RELEASE_APPROVED` 只属于 Ds Bit 技术事实，不能替代商品状态或社媒内容审批。
+3. `content_versions.payload_hash` 变化必须产生新版本，不允许原地改。
+4. `content_approvals` 与 `content_gate_checks` 只追加；撤销用 `decision='revoked'` 或状态置 `REVOKED`，不删除记录。
+5. 商品 `PUBLIC_ELIGIBLE` 被撤销时，所有未发布的 `queued`/`submitting` job 必须取消或转 `unknown` 并对账。
 
 ### 2.5 媒体资产
 
@@ -416,10 +439,27 @@ CREATE INDEX IF NOT EXISTS idx_audit_object ON audit_events(object_type, object_
 |---|---|---|
 | 内容与审批 | 永久 | 审计需要 |
 | 发布任务/尝试 | ≥ 24 个月 | 与平台 Analytics 窗口对齐 |
-| Analytics 原始 | ≥ 24 个月 | LinkedIn 12 个月、Meta 2 年；保留原始以便重算 |
+| Analytics 原始 | 平台级策略，见下表 | 不得用一个统一期限覆盖所有平台 |
 | Token | 仅当前有效 | 撤销/过期后删除密文，保留审计事件 |
 | 站点归因事件 | ≥ 24 个月 | 询盘 ID 脱敏 |
 | 操作审计 | ≥ 36 个月 | 授权、审批、发布、删除 |
+
+### 4.1 平台级分析数据保留
+
+| 平台 | 默认保留 | 依据/限制 |
+|---|---|---|
+| LinkedIn | 24 个月 | API 仅提供滚动 12 个月；保留原始用于重算 |
+| YouTube | 24 个月 | 受 YouTube API Services Terms 约束 |
+| Facebook | 24 个月 | API 仅提供 2 年历史；指标退役后保留原始 |
+| X | 24 个月 | 受 X Developer Agreement 约束 |
+| Reddit | **未获批前为 0** | Data API Terms（2026-07-20 修订）；商业用途需单独协议；获批后按协议与获批用途设定，不默认套用 24 个月 |
+
+规则：
+
+1. 平台条款与本地策略冲突时，取更严格者。
+2. Reddit 未签署商业 API 协议前，不调用 API、不采集、不持久化 Reddit 数据；只允许人工草稿。
+3. 平台调整条款/保留要求时，必须复审并更新本表。
+4. 删除请求必须同时覆盖 `analytics_raw`、`analytics_daily` 与导出副本。
 
 PII 最小化：工作台只存 OIDC `sub`、邮箱、显示名；不存访客姓名/电话；询盘只存 `inquiry_id` 与业务状态，明细留在 Morrishk CRM。
 

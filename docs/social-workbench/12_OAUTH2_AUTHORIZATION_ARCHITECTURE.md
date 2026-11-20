@@ -22,9 +22,9 @@
         ▼                               ▼                               ▼
 ┌──────────────────┐          ┌──────────────────┐          ┌──────────────────────┐
 │ Ds Bit API       │          │ Morrishk API     │          │ LinkedIn / Meta /    │
-│ audience=dsbit   │          │ audience=morrishk│          │ Google / X / Reddit  │
-│ scope=technical  │          │ scope=product +  │          │ 各自独立 Token        │
-│       .read      │          │ inquiry.write    │          │                      │
+│ resource=dsbit   │          │ resource=morrishk│          │ Google / X / Reddit  │
+│ scope=technical  │          │ scope=product /  │          │ 各自独立 Token        │
+│       .read      │          │ attribution      │          │                      │
 └──────────────────┘          └──────────────────┘          └──────────────────────┘
 ```
 
@@ -36,29 +36,62 @@
 
 ## 2. 内部系统：Client Credentials
 
+### 2.0 前置：Token 由谁签发
+
+**在实施前必须确认 Ds Bit 与 Morrishk 是否已经具备 OAuth 2.0 Authorization Server、Token Endpoint 和 Resource Server 校验能力。** 工作台只是 OAuth Client，不能通过新增一张配置表“实现 OAuth2”。
+
+| 情况 | 现状 | 方案 | 不能做的事 |
+|---|---|---|---|
+| A | 已有 OAuth 2.0 AS / Token Endpoint / RS | 在 AS 注册独立客户端；工作台按标准流程获取 Token | 不得共用客户端或 Token |
+| B | 只有 API Key / 静态 JWT / 网关签名 | 建设兼容认证网关，或迁移到 OAuth；明确过渡期与风险 | 不得把 API Key 包装成“OAuth2 已完成” |
+| C | 两边都没有 OAuth 服务 | 单独建设内部授权服务（AS + Token Endpoint + JWKS + 客户端管理 + 审计），再接入工作台 | 不得只在工作台加配置表就宣称完成 |
+
+Token 签发方负责：
+
+- 客户端注册、Secret 哈希、Scope 授予、轮换与吊销；
+- Token 签发、有效期、签名/加密、JWKS；
+- Resource Server 侧的 `iss`、`aud/resource`、`scope`、`exp` 校验。
+
+工作台负责：
+
+- 从 Secret Manager/环境变量取**出站**客户端凭证；
+- 获取并缓存 Token；
+- 按最小 Scope 调用 API；
+- 不保存 Secret 哈希（哈希属于 AS）。
+
+> `audience` 不是 OAuth 2.0 的通用标准参数。优先使用 RFC 8707 的 `resource` 参数；如果实际 AS 只支持 `audience` 扩展，必须在对接文档中明确记录，不能假定所有 AS 都接受。
+
 ### 2.1 客户端
 
-| Client ID | Audience | Scope | 用途 |
+| Client ID | Resource（RFC 8707） | Scope | 用途 |
 |---|---|---|---|
 | `morrishk-social-workbench` | `workbench` | `workbench.read` | 工作台自身服务（可选） |
-| `morrishk-social-workbench-dsbit` | `dsbit` | `technical.read` | 读取 Ds Bit 技术数据 |
-| `morrishk-social-workbench-morrishk` | `morrishk` | `product.read` | 读取商品主数据 |
-| `morrishk-social-workbench-attribution` | `morrishk` | `attribution.write` | 回传询盘归因事件（独立客户端） |
+| `morrishk-social-workbench-dsbit` | `https://<dsbit-host>/api` | `technical.read` | 读取 Ds Bit 技术数据 |
+| `morrishk-social-workbench-morrishk` | `https://<morrishk-host>/api` | `product.read` | 读取商品主数据 |
+| `morrishk-social-workbench-attribution` | `https://<morrishk-host>/api` | `attribution.write` | 回传询盘归因事件（独立客户端） |
 
 实际客户端数量可按部署调整，但 **Ds Bit 与 Morrishk 必须使用不同的 Client ID、Secret、Scope 和 Token**。归因写入使用独立客户端与 Scope，即使该客户端被攻破也不能读取商品/技术数据。
+
+客户端密钥不存放在工作台数据库：
+
+| 项 | 存放位置 |
+|---|---|
+| Client Secret 明文 | Secret Manager / 环境变量；仅运行时内存使用 |
+| Client Secret 哈希 | Authorization Server 的客户端注册表 |
+| 工作台配置 | 只存 `client_id`、`resource`、`token_endpoint`、`scopes`、`secret_ref` |
 
 ### 2.2 流程
 
 ```text
-Workbench                         Auth Server (Ds Bit / Morrishk)
-   │  POST /oauth2/token              │
+Workbench                         Authorization Server
+   │  POST <token_endpoint>           │
    │  grant_type=client_credentials   │
    │  client_id=...                   │
-   │  client_secret=...               │
-   │  audience=dsbit                  │
+   │  client_secret=...（从 Secret Manager 取） │
+   │  resource=https://<dsbit-host>/api │
    │  scope=technical.read            │
    ├─────────────────────────────────▶│
-   │                                  │ 校验 client、audience、scope
+   │                                  │ 校验 client、resource、scope
    │  200 { access_token, expires_in }│
    │◀─────────────────────────────────┤
    │ 缓存至 expires_in - 60s           │
@@ -70,31 +103,33 @@ Workbench                         Auth Server (Ds Bit / Morrishk)
 - Token 有效期建议 **15 分钟**；不签发 refresh token。
 - 工作台在内存缓存；到期前 60 秒重新获取；不得把 Token 写入日志/数据库/前端。
 - 并发获取使用 single-flight，避免风暴。
-- Token 为 JWT 时，API 校验 `iss`、`aud`、`exp`、`nbf`、`scope`、签名（JWKS）。
+- Token 为 JWT 时，API 校验 `iss`、`aud`/`resource`、`exp`、`nbf`、`scope`、签名（JWKS）。
 - 不透明 Token 时，API 通过 introspection 校验。
-- API 端必须同时校验 audience，防止 Ds Bit Token 被 Morrishk API 接受。
+- API 端必须校验 Resource/Audience 绑定，防止 Ds Bit Token 被 Morrishk API 接受。
+- 若 AS 使用 `audience` 扩展而非 `resource`，在配置与文档中记录为“AS 扩展”，不得写成 OAuth 标准。
 
 ### 2.3 权限边界
 
 | 系统 | 允许 | 禁止 |
 |---|---|---|
 | Ds Bit API | `technical.read` 读取已发布技术数据、参数、页码证据 | 任何写入；读取未审核/内部草稿 |
-| Morrishk API | `product.read` 读取商品主数据、`RELEASE_APPROVED` 状态 | 修改商品、价格、库存、分类 |
+| Morrishk API | `product.read` 读取商品主数据与商品公开状态 `PUBLIC_ELIGIBLE` | 修改商品、价格、库存、分类 |
 | 归因接口 | `attribution.write` 写入 `inquiry_id`/事件 | 读取 CRM 明细、修改询盘状态 |
 
 硬规则：
 
 1. 工作台**不得**修改 Ds Bit 技术数据。
 2. 工作台**不得**修改 Morrishk 商品主数据。
-3. 只有 `RELEASE_APPROVED` 的商品事实可进入对外内容；`PIPELINE_PASS` 不等于审批。
-4. 归因写入使用独立 Scope/客户端；即使被攻破也不能改商品/技术数据。
+3. 只有同时满足 Ds Bit `RELEASE_APPROVED`、商品 `PUBLIC_ELIGIBLE`、社媒内容 `SOCIAL_CONTENT_APPROVED`，才可创建发布任务；任何一项不能替代另外两项。
+4. 归因写入使用独立客户端/Scope；即使被攻破也不能改商品/技术数据。
 
 ### 2.4 客户端密钥
 
-- Secret 使用高熵随机值（≥ 32 bytes），只在服务端配置/密钥管理系统中。
-- 服务端只存 **Argon2id/bcrypt 哈希**，不存明文。
+- Secret 使用高熵随机值（≥ 32 bytes），只在 Secret Manager/环境变量中。
+- **Secret 哈希由 Authorization Server 保存**；工作台只保存 `secret_ref`，不保存 Secret 或哈希。
 - 禁止写入 Git、前端、日志、镜像层。
-- 支持两个 active secret 并存，用于轮换。
+- 轮换时由 AS 支持两个 active secret 并存；工作台通过 `secret_ref` 切换到新值。
+- 紧急吊销：AS 立即吊销客户端；工作台进入只读并告警。
 
 ## 3. Morrishk 用户登录（OIDC）
 
@@ -156,13 +191,16 @@ Workbench                         Auth Server (Ds Bit / Morrishk)
 | X | OAuth2 + PKCE | 加密 | `tweet.write`、`media.write` | `tweet.read`、`users.read` |
 | Reddit | OAuth2 | 加密 | `submit` | `read` |
 
+> Reddit 的商业用途需单独协议（Data API Terms 2026-07-20 修订）；未取得明确许可/协议前，不启用 Reddit 外部授权与 API 调用。
+
 规则：
 
-1. 每个平台独立保存 `platform/account_id/account_name/access_token/refresh_token/expires_at/granted_scopes/token_status/last_refresh_at/authorization_owner`。
-2. 发布与分析可使用独立授权记录；分析授权不得自动获得发布能力。
-3. 账号绑定必须展示平台、账号名、类型、Scope，由用户确认。
-4. 撤销必须同时停用该账号的 queued jobs。
-5. 不得把外部平台 Token 用于内部 API。
+1. 账号资产状态见 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md`；未核实归属/管理员的账号不得绑定。
+2. 每个平台独立保存 `platform/account_id/account_name/access_token/refresh_token/expires_at/granted_scopes/token_status/last_refresh_at/authorization_owner`。
+3. 发布与分析可使用独立授权记录；分析授权不得自动获得发布能力。
+4. 账号绑定必须展示平台、账号名、类型、Scope，由用户确认。
+5. 撤销必须同时停用该账号的 queued jobs。
+6. 不得把外部平台 Token 用于内部 API。
 
 ## 5. Token 生命周期
 
@@ -299,9 +337,10 @@ Workbench                         Auth Server (Ds Bit / Morrishk)
 ## 11. 实施顺序（OAuth 部分）
 
 ```text
-O-1 注册内部客户端（dsbit / morrishk 独立）
-O-2 实现 Client Credentials 获取与缓存
-O-3 API 侧校验 iss/aud/scope/exp
+O-0 确认 Ds Bit/Morrishk 的 AS/Token Endpoint/JWKS/RS 能力；按 A/B/C 三种情况选择方案
+O-1 注册内部客户端（dsbit / morrishk / attribution 独立）
+O-2 实现 Client Credentials 获取与缓存（resource 参数）
+O-3 API 侧校验 iss/resource 或 aud/scope/exp
 O-4 接入 Morrishk OIDC（Code + PKCE）
 O-5 建立 RBAC 与会话
 O-6 实现外部平台 OAuth（P1 先 LinkedIn）
@@ -310,14 +349,14 @@ O-8 撤销、轮换、审计
 O-9 安全测试
 ```
 
-门禁：O-1..O-3 未完成，不进入真实平台发布；O-4..O-5 未完成，不开放多用户工作台。
+门禁：O-0..O-3 未完成，不进入真实平台发布；O-4..O-5 未完成，不开放多用户工作台。
 
 ## 12. 待确认
 
 | 编号 | 事项 | 影响 |
 |---|---|---|
 | OQ-01 | Morrishk 是否已有 OIDC Issuer | 用户登录方案 |
-| OQ-02 | Ds Bit / Morrishk 是否支持 Client Credentials 与 audience | 内部授权 |
+| OQ-02 | Ds Bit / Morrishk 是否已有 OAuth 2.0 AS、Token Endpoint、JWKS 与 Resource Server 校验；若没有，选兼容网关、迁移还是自建授权服务 | 内部授权能否实施 |
 | OQ-03 | 归因写入接口归属（Morrishk 主站/CRM） | Scope 与客户端 |
 | OQ-04 | 审批人与创建人是否必须分离 | RBAC |
 | OQ-05 | 生产部署是否可接 KMS/Secret Manager | Token/密钥安全 |

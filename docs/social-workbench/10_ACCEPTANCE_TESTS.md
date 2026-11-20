@@ -49,6 +49,19 @@ node --test test/security
 | OAuth-07 | Token 过期 | 401 → 刷新/`reauth_required` | MOCK |
 | OAuth-08 | 撤销授权 | Token 删除，queued job 取消 | MOCK |
 
+### 3.1A 三层门禁（R1 新增）
+
+| ID | 用例 | 预期 | 等级 |
+|---|---|---|---|
+| GATE-01 | Ds Bit 事实非 `RELEASE_APPROVED` | 拒绝创建 job | UNIT |
+| GATE-02 | 商品非 `PUBLIC_ELIGIBLE` | 拒绝创建 job | UNIT |
+| GATE-03 | 社媒内容非 `SOCIAL_CONTENT_APPROVED` | 拒绝创建 job | UNIT |
+| GATE-04 | 三项全部满足 | 允许创建 job | UNIT |
+| GATE-05 | 仅 `RELEASE_APPROVED` | **拒绝**（不能替代商品/社媒） | UNIT |
+| GATE-06 | 仅 `SOCIAL_CONTENT_APPROVED` | **拒绝**（不能替代技术/商品） | UNIT |
+| GATE-07 | 商品状态在排队后撤销 | 取消 queued job；已发布走删除流程 | UNIT |
+| GATE-08 | 社媒内容修改 | 旧审批失效，需重新 `SOCIAL_CONTENT_APPROVED` | UNIT |
+
 ### 3.2 发布
 
 | ID | 用例 | 预期 | 等级 |
@@ -63,7 +76,7 @@ node --test test/security
 | PUB-08 | 超时 | unknown，不自动重试 | MOCK |
 | PUB-09 | 重复提交 | 第二次不产生新帖 | REAL |
 | PUB-10 | 内容版本变更 | 新 job，旧 job 不复用 | UNIT |
-| PUB-11 | 未审批内容 | 拒绝创建 job | UNIT |
+| PUB-11 | 社媒内容未审批/商品不合格 | 拒绝创建 job | UNIT |
 | PUB-12 | Page 与账号不匹配 | 拒绝发布 | UNIT/REAL |
 | PUB-13 | 删除帖子 | 204，审计记录 | REAL（可选） |
 
@@ -102,6 +115,7 @@ node --test test/security
 | DB-04 | 旧表数据 | 不修改、不删除 |
 | DB-05 | 大数据原始响应 | 不阻塞/可归档 |
 | DB-06 | 事务失败 | 回滚，服务停止 |
+| DB-07 | 平台保留策略 | 按平台执行；Reddit 未获批时无数据 |
 
 ### 3.6 Analytics 与归因
 
@@ -114,6 +128,7 @@ node --test test/security
 | AN-05 | 跨平台合并 | 不把不同口径直接相加 |
 | AN-06 | LinkedIn 12 个月边界 | 超出返回空/明确提示 |
 | AN-07 | Meta 指标退役 | 标记 deprecated，不写 0 |
+| AN-08 | Reddit 未签协议 | 不采集、不持久化；仅草稿 |
 | UTM-01 | 生成 UTM | campaign/content 与 DB 一致 |
 | UTM-02 | 跳转保留参数 | 不丢失 |
 | AT-01 | last-touch | 询盘前最后 content 正确 |
@@ -125,7 +140,7 @@ node --test test/security
 
 必须保存以下证据（脱敏）：
 
-1. 应用 ID、Page URN。
+1. 应用 ID、Page URN（必须来自 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md` 中已核实的账号）。
 2. 授权时间、Scope、账号类型。
 3. 发布请求：时间、HTTP 状态、Post URN、Post URL。
 4. 查询结果：`lifecycleState`。
@@ -144,7 +159,7 @@ node --test test/security
 | 平台 | 重点 |
 |---|---|
 | YouTube | 断点续传、处理状态轮询、`publishAt`、配额、视频过大、版权/处理失败 |
-| Facebook | Page Token、`CREATE_CONTENT`、定时 10 分钟–30 天、指标退役、100 likes 限制 |
+| Facebook | Page Token、`CREATE_CONTENT`、定时 10 分钟–30 天、动态限流响应头、指标退役、100 likes 限制 |
 | 通用 | 媒体上传失败、异步状态、跨平台不合并 |
 
 ## 5. P3 测试重点
@@ -159,6 +174,8 @@ node --test test/security
 
 - X 预算上限、带 URL 帖子成本、超时不重复计费。
 - Reddit 人工确认、版规、无 Analytics 不伪造。
+- **Reddit 前置门禁**：未取得商业 API 协议/明确许可时，P4 只能验收“草稿 + 人工发布”，不得调用 `submit` 或采集 API 数据。
+- Facebook 限流：不得以固定 200×/4800× 作为验收值；必须验证响应头驱动的降速/暂停。
 - RBAC：无权限用户不能审批/发布。
 - 审计：所有关键动作可追溯。
 

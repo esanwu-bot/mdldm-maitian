@@ -227,7 +227,7 @@ scheduled / published / failed / not_logged_in / stopped / skipped
 | 内容模型 | 增加产品身份、来源版本、证据、审批、平台变体 |
 | 数据模型 | 新增原始数据、账号、任务尝试、审批、归因表 |
 | 认证 | 新增 OAuth2/OIDC/Token 加密存储 |
-| 审批 | 新增 `RELEASE_APPROVED` 门禁与审计 |
+| 审批 | 新增三层门禁：Ds Bit 技术事实 `RELEASE_APPROVED`、商品 `PUBLIC_ELIGIBLE`、社媒内容 `SOCIAL_CONTENT_APPROVED`，并记录审计 |
 | 部署 | 去掉 macOS 专属命令依赖，明确 Linux/容器方案 |
 
 ## 9. 运行与部署审计

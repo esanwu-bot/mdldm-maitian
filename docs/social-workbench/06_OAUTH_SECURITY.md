@@ -42,13 +42,13 @@ GET /oauth/{platform}/callback?code=...&state=...
 
 | 平台 | 身份接口 | 绑定字段 |
 |---|---|---|
-| LinkedIn | `/v2/userinfo`；Organization Access Control | `sub`、`urn:li:organization:{id}` |
+| LinkedIn | OIDC：`GET /v2/userinfo`（`openid profile email`）；旧版成员资料：`GET /v2/me`（`r_liteprofile`/实际批准的 `r_basicprofile`） | `sub`、`urn:li:organization:{id}` |
 | YouTube | `channels.list?mine=true` | channel ID、title |
 | Facebook | `/me/accounts` | Page ID、name、tasks |
 | X | `GET /2/users/me` | user ID、username |
 | Reddit | `GET /api/v1/me` | username、id |
 
-绑定前必须展示：平台、账号名、账号类型、将获得的权限。用户确认后才保存。
+绑定前必须展示：平台、账号名、账号类型、将获得的权限。用户确认后才保存。账号资产状态见 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md`；未核实归属/管理员的账号不得绑定或发布。
 
 ## 3. Token 存储
 
@@ -90,7 +90,7 @@ oauth_tokens:    account_id, access_token_enc, refresh_token_enc, expires_at, sc
 
 | 平台 | 发布 | 分析 | 身份 | 禁止申请 |
 |---|---|---|---|---|
-| LinkedIn | `w_organization_social` | `rw_organization_admin`、`r_organization_social` | `r_basicprofile` | `r_member_social`（closed） |
+| LinkedIn | `w_organization_social` | `rw_organization_admin`、`r_organization_social` | OIDC：`openid profile email`；旧版：`r_liteprofile`（`r_basicprofile` 仅在已获批时） | `r_member_social`（closed） |
 | YouTube | `youtube.upload` | `yt-analytics.readonly` | `youtube.readonly` | 无必要的宽 Scope |
 | Facebook | `pages_manage_posts`、`pages_read_engagement` | `read_insights` | `pages_show_list` | 用户好友/私信权限 |
 | X | `tweet.write`、`media.write` | `tweet.read`、`users.read` | `users.read` | DM 权限 |
@@ -101,6 +101,7 @@ oauth_tokens:    account_id, access_token_enc, refresh_token_enc, expires_at, sc
 - 发布与 Analytics 使用**独立授权记录**（同一平台账号可有两条 Token，Scope 不同）。
 - 申请新 Scope 必须重新走授权，不得静默扩大。
 - Scope 变化必须使旧审批失效（因为能力边界变了）。
+- LinkedIn 身份读取不得混用：OIDC UserInfo 用 `openid profile email`；旧版成员资料 API 才用 `r_liteprofile`/`r_basicprofile`，且以后台实际批准为准。
 
 ## 5. 日志与错误脱敏
 

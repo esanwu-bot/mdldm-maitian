@@ -69,9 +69,12 @@ docs/social-workbench/
 | P1-A3 | 关联 Morrishk Company Page | 项目负责人 | Page 管理员可见应用 |
 | P1-A4 | 申请 Community Management API 开发层 | 项目负责人 | 批准邮件/后台状态 |
 | P1-A5 | 测试 Page（建议独立测试页） | 项目负责人 | Page URN |
-| P1-A6 | 测试内容与审批人 | 内容负责人 | `RELEASE_APPROVED` 记录 |
+| P1-A6 | 测试内容与审批链 | 内容/商品负责人 | Ds Bit `RELEASE_APPROVED` + 商品 `PUBLIC_ELIGIBLE` + 社媒 `SOCIAL_CONTENT_APPROVED` 三项记录 |
 | P1-A7 | Redirect URI 白名单 | 开发 | `https://<host>/oauth/linkedin/callback` |
 | P1-A8 | 部署环境与域名 | 运维 | HTTPS 可访问 |
+| P1-A9 | 内部 OAuth 能力（仅当 P1 需要读商品/技术数据） | 平台/安全 | 按 `12` 的 A/B/C 三种情况之一提供 AS/网关与凭证引用 |
+
+> `P1-A3/A5/A6` 依赖 `13_SOCIAL_PLATFORM_AND_ACCOUNT_INVENTORY.md` 中已核实的真实账号；账号未提供时，P1 只能做到 `MOCK_PASS`，不能选定或连接真实 Page。
 
 ### 3.3 实施步骤
 
@@ -87,7 +90,7 @@ docs/social-workbench/
 
 - `GET /oauth/linkedin/start`：生成 `state`，绑定会话，跳转授权页。
 - `GET /oauth/linkedin/callback`：校验 `state`、错误参数、code；服务端换 Token。
-- 读取 `/v2/userinfo` 与组织访问角色。
+- 读取身份与组织访问角色：OIDC 使用 `/v2/userinfo` + `openid profile email`；旧版成员资料使用 `/v2/me` + `r_liteprofile`/实际批准的 `r_basicprofile`；不得混用。
 - 账号选择页：展示可管理的 Page，用户确认绑定。
 - 保存加密 Token。
 
@@ -251,9 +254,9 @@ docs/social-workbench/
 ## 6. P4：X、Reddit 与完整工作台
 
 - X：预算闸门、无链接优先、超时对账、成本对账。
-- Reddit：草稿 + 人工确认；无 Analytics 不伪造。
+- Reddit：草稿 + 人工确认；无 Analytics 不伪造。**未取得商业 API 协议/明确许可前，不注册生产应用、不调用 API、不采集数据。**
 - 完整工作台：内容库、审批队列、日历、账号中心、审计、RBAC。
-- 通过条件：成本不超预算；Reddit 规则合规；X 无重复发帖。
+- 通过条件：成本不超预算；Reddit 商业协议/规则合规；X 无重复发帖。
 
 ## 7. 每阶段交付模板
 
